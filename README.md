@@ -46,10 +46,6 @@ The drone uses YOLO to monitor the warehouse, identifying objects and intruders 
 - Diego Enrique Vargas Ramírez A01635782
 - Luis Fernando Cuevas Arroyo A01637254
 
-## Muestras Youtube de simulacion
-- Vision Yolo: https://youtu.be/VhlHuHSQZBI 
-- Simulacion agente: https://youtu.be/FG7tl6h5HHA
-
 ## Proceso para clonar
 - git clone https://github.com/ArturoRM22/drone_agents.git
 
