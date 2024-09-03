@@ -67,6 +67,7 @@ The drone uses YOLO to monitor the warehouse, identifying objects and intruders 
 
 ## Usar unity pack
 - Creas proyecto en unity
+- Descargas el archivo Simulation.unitypackage del siguiente link de drive: https://drive.google.com/file/d/1AgDKW7svMgf1zU7_a53h-G-MDXYE5m1n/view?usp=sharing
 - En la pestaña de assets importas el pack Simulation.unitypackage
 - Corres
 
