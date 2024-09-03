@@ -72,6 +72,6 @@ The drone uses YOLO to monitor the warehouse, identifying objects and intruders 
 
 ## Jupyter notebook version (gráficas (parametros hardcodeados))
 - Asegurarse de tener instalado anaconda o algun otro interprete de Jupyter notebooks  (O google colab)
-- Abrir el archivo CamerasModel.ipynb y corres
+- Abrir el archivo Current_CamerasModel.ipynb y corres
 - Verificar las instalaciones (el primer chunk)
 

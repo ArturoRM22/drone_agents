@@ -44,7 +44,6 @@ def get_neighbors(grid,node):
   return neighbors
 
 
-
 #Creamos la ontologia
 onto = get_ontology("file://ontologia.owl")
 
@@ -80,7 +79,14 @@ with onto:
         domain = [Place]
         range = [str]
 
+  #Relaciones Camara
+
+  class has_seen_intruder(ObjectProperty, FunctionalProperty):
+    domain = [Camera]
+    range = [Intruder]
+
   #Relaciones Dron
+
   class is_following_intruder(ObjectProperty, FunctionalProperty):
     domain = [Drone]
     range = [Intruder]
@@ -88,12 +94,6 @@ with onto:
   class is_called_by_camera(ObjectProperty, FunctionalProperty):
     domain = [Drone]
     range = [Camera]
-
-  #Relaciones Camara
-
-  class has_seen_intruder(ObjectProperty, FunctionalProperty):
-    domain = [Camera]
-    range = [Intruder]
 
   #Relaciones Intruso
 
@@ -105,22 +105,26 @@ with onto:
     domain = [Intruder]
     range = [str]
 
+  class is_hostile(DataProperty,FunctionalProperty):
+    domain = [Intruder]
+    range = [str]
+
   #Relaciones Guardia de seguridad
 
-  class has_dron(ObjectProperty,FunctionalProperty):
+  class has_drone(ObjectProperty,FunctionalProperty):
     domain = [Guard]
     range = [Drone]
-
-    # Relacion Guard-Drone
-  class has_drone(ObjectProperty, FunctionalProperty):
-      domain = [Guard]
-      range = [Drone]
 
   # New relationship for inspecting intruders
   class is_inspecting_intruder(ObjectProperty, FunctionalProperty):
       domain = [Guard]
       range = [Intruder]
 
+class Message:
+    def __init__(self, sender, receiver, content):
+        self.sender = sender
+        self.receiver = receiver
+        self.content = content
 
 class CameraAgent(ap.Agent):
 
@@ -150,6 +154,8 @@ class CameraAgent(ap.Agent):
     Funcion de See
   """
   def see(self, e):
+
+    #Vemos los vecinos de la camara
     self.neighbors = e.neighbors(self,5)
 
   """
@@ -172,7 +178,7 @@ class CameraAgent(ap.Agent):
       self.this_camera = Camera(is_in_place=Place(at_position=str(place)),
                                     has_seen_intruder = None )
 
-      self.the_drone = self.model.drones[0].this_drone #Since there is just one drone
+      #self.the_drone = self.model.drones[0].this_drone #Since there is just one drone
 
 
     self.see(self.model.grid)
@@ -202,15 +208,24 @@ class CameraAgent(ap.Agent):
   """
 
   def check_for_intruder(self):
-    print("BUSCANDO")
-    for neighbor in self.neighbors:
-      if neighbor.agentType == 2:
-        self.this_camera.has_seen_intruder = neighbor.this_intruder #Asigna el intruso que ha detectado
-        self.this_camera.has_seen_intruder.has_been_detected = True #Cambia el estado del intruso a True
-        self.the_drone.is_following_intruder = neighbor.this_intruder #Asigna al dron el intruso detectado
-        self.the_drone.is_called_by_camera = self.this_camera #Asigna la camara que ha detectado al dron
-        print("INTRUSO")
+      for neighbor in self.neighbors:
+          if neighbor.agentType == 2:  # Intruder detected
+              self.this_camera.has_seen_intruder = neighbor.this_intruder
+              # Broadcast a message to notify the intruder about detection
+              message = Message(sender = self.this_camera, receiver="Intruder", content="Detected")
+              self.model.messages.append(message)
 
+              # Broadcast a message to notify the drone about detection
+              message = Message(sender = self.this_camera, receiver="Drone", content=neighbor.this_intruder)
+              self.model.messages.append(message)
+
+              """
+              message = Message(sender = self.this_camera, receiver="Drone", content=self.this_camera)
+              self.model.messages.append(message)
+              """
+
+              #self.the_drone.is_following_intruder = neighbor.this_intruder #Implemented with messages.
+              #self.the_drone.is_called_by_camera = self.this_camera #Implemented with messages.
 
   """
     <-- Reglas -->
@@ -240,7 +255,7 @@ class DroneAgent(ap.Agent):
   def setup(self):
     self.firstStep = True
     self.agentType = 1
-    self.has_reached_target = False  # Add a flag to track if the drone has reached its target
+    self.received_messages = []
     #Variables de patrulla
     self.path_counter = 0
     self.path = [
@@ -271,6 +286,7 @@ class DroneAgent(ap.Agent):
     ]
     self.pathfinding_path = []
     self.target = None
+    self.currentMessage = None
 
 
     self.actions = (
@@ -278,7 +294,9 @@ class DroneAgent(ap.Agent):
       self.patrol,
       self.path_to_target,
       self.move_to_target_intruder,
-      self.call_guard
+      self.call_guard,
+      self.inspect_intruder,
+      self.report_to_guard,
     )
 
     self.rules = (
@@ -286,15 +304,33 @@ class DroneAgent(ap.Agent):
       self.patrol_rule,
       self.path_to_target_rule,
       self.move_to_target_intruder_rule,
-      self.call_guard_rule
+      self.call_guard_rule,
+      self.inspect_intruder_rule,
+      self.report_to_guard_rule,
     )
 
 
   """
     Funcion de See
   """
+
   def see(self, e):
     self.neighbors = e.neighbors(self,3)
+    #Revisar mensajes
+    for message in self.model.messages:
+      if message.receiver == "Drone" and isinstance(message.content, Intruder):
+        self.this_drone.is_following_intruder = message.content
+        self.model.messages.remove(message)
+
+      if message.receiver == "Drone" and message.content == "Analyze":
+        print("Guardia me pide analizar")
+        self.currentMessage = message.content
+        self.model.messages.remove(message)
+
+      if message.receiver == "Drone" and (message.content == "1" or message.content == "0"):
+        print("El intruso se ha identificado")
+        self.currentMessage = message.content
+        self.model.messages.remove(message)
 
   """
     Funcion de Next
@@ -318,8 +354,6 @@ class DroneAgent(ap.Agent):
                                     is_called_by_camera=None)
 
       self.the_guard = self.model.guards[0].this_guard #Since there is just one guard
-
-
     self.see(self.model.grid)
     self.next()
 
@@ -348,15 +382,13 @@ class DroneAgent(ap.Agent):
     self.path_counter += 1
 
   def check_for_intruder(self):
-    print("DRON BUSCANDO")
     for neighbor in self.neighbors:
       if neighbor.agentType == 2:
-        print("DRON ENCONTRO INTRUSO")
+        message = Message(sender = self.this_drone, receiver="Intruder", content="Detected")
+        self.model.messages.append(message)
         self.this_drone.is_following_intruder = neighbor.this_intruder
-        neighbor.this_intruder.has_been_detected = True
 
   def get_neighbors(self, pos):
-      """Helper function to get valid neighbors in a 4-directional grid."""
       x, y = pos
       neighbors = []
       directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # up, down, left, right
@@ -425,19 +457,26 @@ class DroneAgent(ap.Agent):
     current_pos = eval(self.this_drone.is_in_place.at_position)
     target_pos = eval(self.target)
 
-    if current_pos == target_pos:
-        print(f"drone pos: {current_pos} target pos: {target_pos}")
-        self.has_reached_target = True
-
-
   def call_guard(self):
-    print("Llamar")
-    if self.has_reached_target:
-      print("Drone reached the target and is calling the guard.")
-      self.the_guard.has_dron = self.this_drone
-      self.the_guard.is_inspecting_intruder = self.this_drone.is_following_intruder
-      # Reset the flag after calling the guard
-      self.has_reached_target = False
+    print("Drone reached the target and is calling the guard.")
+
+    message = Message(sender = self.this_drone, receiver="Guard", content= "Intruder Found")
+    self.model.messages.append(message)
+    #self.the_guard.is_inspecting_intruder = self.this_drone.is_following_intruder
+
+    self.has_called_guard = True
+
+  def inspect_intruder(self):
+    print("Drone is inspecting the intruder.")
+    message = Message(sender = self.this_drone, receiver="Intruder", content= "Identify")
+    self.model.messages.append(message)
+    self.currentMessage = "Sent"
+
+  def report_to_guard(self):
+    print("Drone is reporting to the guard.")
+    message = Message(sender = self.this_drone, receiver="Guard", content= self.currentMessage)
+    self.model.messages.append(message)
+    self.currentMessage = "Sent"
 
   """
     <-- Reglas -->
@@ -454,15 +493,18 @@ class DroneAgent(ap.Agent):
     return sum(validator) == 2
 
   def check_for_intruder_rule(self, act):
-    validator = [False, False]
+    validator = [False, False,False]
 
     if self.this_drone.is_following_intruder == None:
       validator[0] = True
 
-    if act == self.check_for_intruder:
+    if self.currentMessage == None:
       validator[1] = True
 
-    return sum(validator) == 2
+    if act == self.check_for_intruder:
+      validator[2] = True
+
+    return sum(validator) == 3
 
   def path_to_target_rule(self, act):
     validator = [False, False, False,False]
@@ -499,15 +541,50 @@ class DroneAgent(ap.Agent):
     return sum(validator) == 4
 
   def call_guard_rule(self, act):
-    validator = [False, False]
+    validator = [False, False, False, False]
 
-    if self.has_reached_target:  # Trigger call guard if the drone has reached the target
+    if self.this_drone.is_following_intruder != None:
       validator[0] = True
 
-    if act == self.call_guard:
+    if self.currentMessage ==  None:
       validator[1] = True
 
-    return sum(validator) == 2
+    if self.this_drone.is_following_intruder != None:
+      if self.this_drone.is_in_place.at_position == self.this_drone.is_following_intruder.is_in_place.at_position:
+        validator[2] = True
+
+    if act == self.call_guard:
+      validator[3] = True
+
+    return sum(validator) == 4
+
+  def inspect_intruder_rule(self, act):
+    validator = [False, False, False]
+
+    if self.this_drone.is_following_intruder != None:
+      validator[0] = True
+
+    if self.currentMessage == "Analyze":
+      validator[1] = True
+
+    if act == self.inspect_intruder:
+      validator[2] = True
+
+    return sum(validator) == 3
+
+  def report_to_guard_rule(self, act):
+    validator = [False, False, False]
+
+    if self.this_drone.is_following_intruder != None:
+      validator[0] = True
+
+    if self.currentMessage == "1" or self.currentMessage == "0":
+      validator[1] = True
+
+    if act == self.report_to_guard:
+      validator[2] = True
+
+    return sum(validator) == 3
 
 class IntruderAgent(ap.Agent):
   """
@@ -518,25 +595,24 @@ class IntruderAgent(ap.Agent):
     self.firsStep = True
     self.targets = []
     self.path = []
+    self.currentMessage = None
 
     self.targets.append((random.randint(0, round(self.model.p.M/2)-1),
                           random.randint(0, round(self.model.p.N/2)-1)))
-    print(f"target 1: {self.targets[0]}")
-
-    self.targets.append((random.randint(0, round(self.model.p.M/2)-1),
-                          random.randint(round(self.model.p.N/2), self.model.p.N-1)))
-    print(f"target 2: {self.targets[1]}")
 
     self.targets.append((random.randint(round(self.model.p.M/2), self.model.p.M-1),
                           random.randint(round(self.model.p.N/2), self.model.p.N-1)))
 
-    print(f"target 3: {self.targets[2]}")
+    self.targets.append((random.randint(0, round(self.model.p.M/2)-1),
+                          random.randint(round(self.model.p.N/2), self.model.p.N-1)))
+
 
     self.actions = (
         self.select_target,
         self.path_to_target,
         self.move_to_target,
         self.pick_up_target,
+        self.identify_myself,
 
     )
 
@@ -545,16 +621,24 @@ class IntruderAgent(ap.Agent):
         self.path_to_target_rule,
         self.move_to_target_rule,
         self.pick_up_target_rule,
+        self.identify_myself_rule,
     )
 
   """
     <-- Funcion de See -->
   """
-
   def see(self, e):
     currentPos = e.positions[self]
     self.this_intruder.is_in_place.at_position = str(currentPos)
 
+    for message in self.model.messages:
+      if message.receiver == "Intruder" and message.content == 'Detected':
+        self.this_intruder.has_been_detected = True
+        self.model.messages.remove(message)
+
+      if message.receiver == "Intruder" and message.content == 'Identify':
+        self.currentMessage = message.content
+        self.model.messages.remove(message)
   """
     <-- Funcion de Next -->
   """
@@ -573,13 +657,14 @@ class IntruderAgent(ap.Agent):
   def step(self):
     if self.firsStep:
       self.firsStep = False
+      hostility = random.randint(0,1)
+
       place = self.model.grid.positions[self]
       self.this_intruder = Intruder(is_in_place=Place(at_position=str(place)),
                                     has_been_detected= False,
-                                    has_targets='')
-
-    if self.this_intruder.has_been_detected:
-      print("ME HAN DETECTADO")
+                                    has_targets='',
+                                    is_hostile = str(hostility)
+                                    )
 
     self.see(self.model.grid)
     self.next()
@@ -592,23 +677,22 @@ class IntruderAgent(ap.Agent):
       pass
 
   def select_target(self):
-      print("ESCOGEMOS")
-      self.this_intruder.has_targets = str(self.targets.pop())
+
+    self.this_intruder.has_targets = str(self.targets.pop())
 
   def get_neighbors(self, pos):
-      """Helper function to get valid neighbors in a 4-directional grid."""
-      x, y = pos
-      neighbors = []
-      directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # up, down, left, right
+    x, y = pos
+    neighbors = []
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # up, down, left, right
 
-      for dx, dy in directions:
-          nx, ny = x + dx, y + dy
-          # Check if the neighbor is within the grid bounds and is walkable (no wall/obstacle)
-          if 0 <= nx < self.model.p.M and 0 <= ny < self.model.p.N:
-              if (nx,ny) in self.model.reservations.empty:  # Replace with your actual obstacle-checking logic
-                  neighbors.append((nx, ny))
+    for dx, dy in directions:
+        nx, ny = x + dx, y + dy
+        # Check if the neighbor is within the grid bounds and is walkable (no wall/obstacle)
+        if 0 <= nx < self.model.p.M and 0 <= ny < self.model.p.N:
+            if (nx,ny) in self.model.reservations.empty:  # Replace with your actual obstacle-checking logic
+                neighbors.append((nx, ny))
 
-      return neighbors
+    return neighbors
 
   def astar(self, start, goal):
       """A* algorithm to find the shortest path."""
@@ -643,7 +727,6 @@ class IntruderAgent(ap.Agent):
 
   def path_to_target(self):
       targetPos = eval(self.this_intruder.has_targets)
-      print(f'OBJETIVO: {targetPos}')
       currentPos = eval(self.this_intruder.is_in_place.at_position)
 
       # Generate the path using A* algorithm
@@ -656,14 +739,18 @@ class IntruderAgent(ap.Agent):
 
 
   def move_to_target(self):
-    print("MOVER")
-    print(f"current pos: {self.this_intruder.is_in_place.at_position}")
     self.model.grid.move_to(self,self.path[0])
+    self.this_intruder.is_in_place.at_position = str(self.model.grid.positions[self])
     self.path.pop(0)
 
   def pick_up_target(self):
-      print("TOMAMOS")
       self.this_intruder.has_targets = ''
+
+  def identify_myself(self):
+    print("Me identifico")
+    message = Message(sender = self.this_intruder, receiver="Drone", content= self.this_intruder.is_hostile)
+    self.model.messages.append(message)
+    self.currentMessage = "Sent"
 
   def select_target_rule(self, act):
       validator = [False, False, False, False]
@@ -730,6 +817,20 @@ class IntruderAgent(ap.Agent):
 
       return sum(validator) == 3
 
+  def identify_myself_rule(self, act):
+    validator = [False, False, False]
+
+    if self.this_intruder.has_been_detected == True:
+      validator[0] = True
+
+    if self.currentMessage == "Identify":
+      validator[1] = True
+
+    if act == self.identify_myself:
+      validator[2] = True
+
+    return sum(validator) == 3
+
 class GuardAgent(ap.Agent):
 
   """
@@ -743,12 +844,15 @@ class GuardAgent(ap.Agent):
   def setup(self):
     self.agentType = 4
     self.firstStep = True
+    self.currentMessage = None
     self.actions = (
-
+        self.inspect_with_drone,
+        self.choose_alarm,
     )
 
     self.rules = (
-
+        self.inspect_with_drone_rule,
+        self.choose_alarm_rule,
     )
 
 
@@ -756,13 +860,26 @@ class GuardAgent(ap.Agent):
     Funcion de See
   """
   def see(self, e):
-    pass
+    for message in self.model.messages:
+      if message.receiver == "Guard" and message.content == "Intruder Found":
+        self.this_guard.has_drone = message.sender
+        self.model.messages.remove(message)
+        self.currentMessage = message.content
+
+      if message.receiver == "Guard" and (message.content == "0" or message.content == "1"):
+        self.currentMessage = message.content
+        self.model.messages.remove(message)
+
+
 
   """
     Funcion de Next
   """
   def next(self):
-    pass
+    for act in self.actions:
+      for rule in self.rules:
+        if rule(act):
+          act()
 
   """
     Funcion de Paso
@@ -775,10 +892,7 @@ class GuardAgent(ap.Agent):
       self.this_guard = Guard(is_in_place=Place(at_position=str(place)), has_drone=None, is_inspecting_intruder=None)
 
     self.see(self.model.grid)
-    if self.this_guard.has_dron != None:
-      print(f"Controlling drone: {self.this_guard.has_drone}")
-    if self.this_guard.is_inspecting_intruder != None:
-      print(f"Inspecting intruder: {self.this_guard.is_inspecting_intruder.is_in_place.at_position}")
+
     self.next()
 
   """
@@ -799,9 +913,54 @@ class GuardAgent(ap.Agent):
     <-- Acciones -->
   """
 
+  def inspect_with_drone(self):
+    message = Message(sender = self.this_guard, receiver="Drone", content= "Analyze")
+    self.model.messages.append(message)
+    self.currentMessage = "Sent"
+
+  def choose_alarm(self):
+    if eval(self.currentMessage) == 0:
+      print("RESULTADO DE INTRUSO")
+      print(f"Hostilidad: " + self.currentMessage)
+      print("Falsa Alarma")
+
+    else:
+      print("RESULTADO DE INTRUSO")
+      print(f"Hostilidad: " + self.currentMessage)
+      print("Alarma General")
+
+    self.currentMessage = "Sent"
+
   """
     <-- Reglas -->
   """
+  def inspect_with_drone_rule(self, act):
+    validator = [False, False, False]
+
+    if self.this_guard.has_drone != None:
+      validator[0] = True
+
+    if self.currentMessage == "Intruder Found":
+      validator[1] = True
+
+    if act == self.inspect_with_drone:
+      validator[2] = True
+
+    return sum(validator) == 3
+
+  def choose_alarm_rule(self, act):
+    validator = [False, False, False]
+
+    if self.this_guard.has_drone != None:
+      validator[0] = True
+
+    if self.currentMessage == "0" or self.currentMessage == "1":
+      validator[1] = True
+
+    if act == self.choose_alarm:
+      validator[2] = True
+
+    return sum(validator) == 3
 
 class WallAgent(ap.Agent):
 
@@ -866,7 +1025,7 @@ class WallAgent(ap.Agent):
   """
     <-- Reglas -->
   """
-     
+
 class DroneModel(ap.Model):
 
   """
@@ -883,7 +1042,8 @@ class DroneModel(ap.Model):
     self.grid = ap.Grid(self, (self.p.M, self.p.N), track_empty=True)
     self.reservations = ap.Grid(self, (self.p.M, self.p.N), track_empty=True)
 
-
+    #Instancia mensajes
+    self.messages = []
 
     self.wall_positions = [
       # Scaled walls to fit a 25x25 grid
@@ -924,6 +1084,9 @@ class DroneModel(ap.Model):
 
   def step(self):
     print(f"Step: {self.steps}")
+    print(f"Message: { len(self.messages) }")
+    for message in self.messages:
+      print(f"Sender: {message.sender}, Receiver: {message.receiver}, Content: {message.content}")
     self.guards.step()
     self.drones.step()
     self.cameras.step()
@@ -940,7 +1103,6 @@ class DroneModel(ap.Model):
 
   def end(self):
     pass
-
 
 pyParams = {
     'M': 25,
