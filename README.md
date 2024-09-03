@@ -59,7 +59,7 @@ The drone uses YOLO to monitor the warehouse, identifying objects and intruders 
 - python app.py
 - Correr unity
 
-## Proceso para correr el servidor de la visión computacional (Yolo)
+## (Aún no implementado) Proceso para correr el servidor de la visión computacional (Yolo)
 - git clone https://github.com/Nuclea-Solutions/tec-2024B.git
 - cd tec-2024B\examples\unity-server
 - python server.py
