@@ -43,7 +43,6 @@ def get_neighbors(grid,node):
 
   return neighbors
 
-
 #Creamos la ontologia
 onto = get_ontology("file://ontologia.owl")
 
@@ -224,9 +223,6 @@ class CameraAgent(ap.Agent):
               self.model.messages.append(message)
               """
 
-              #self.the_drone.is_following_intruder = neighbor.this_intruder #Implemented with messages.
-              #self.the_drone.is_called_by_camera = self.this_camera #Implemented with messages.
-
   """
     <-- Reglas -->
   """
@@ -255,7 +251,6 @@ class DroneAgent(ap.Agent):
   def setup(self):
     self.firstStep = True
     self.agentType = 1
-    self.received_messages = []
     #Variables de patrulla
     self.path_counter = 0
     self.path = [
@@ -271,7 +266,7 @@ class DroneAgent(ap.Agent):
         (1, 22), (1, 21), (1, 20), (1, 19), (1, 18), (1, 17), (1, 16), (1, 15), (1, 14), (1, 13), (1, 12), (1, 11), (1, 10),
         (2, 10), (3, 10), (4, 10), (5, 10), (6, 10), (7, 10), (8, 10), (9, 10), (10, 10), (11, 10), (12, 10), (13, 10),
         (13, 11), (13, 12), (13, 13), (13, 14),
-        (15, 14), (16, 14),
+        (14, 14), (15, 14), (16, 14),
         (16, 13), (16, 12), (16, 11), (16, 10), (16, 9), (16, 8), (16, 7), (16, 6), (16, 5), (16, 4),
         (15, 4), (14, 4), (13, 4),
         (13, 5), (13, 6),
@@ -297,6 +292,7 @@ class DroneAgent(ap.Agent):
       self.call_guard,
       self.inspect_intruder,
       self.report_to_guard,
+      self.move_exit
     )
 
     self.rules = (
@@ -307,6 +303,7 @@ class DroneAgent(ap.Agent):
       self.call_guard_rule,
       self.inspect_intruder_rule,
       self.report_to_guard_rule,
+      self.move_exit_rule
     )
 
 
@@ -322,13 +319,18 @@ class DroneAgent(ap.Agent):
         self.this_drone.is_following_intruder = message.content
         self.model.messages.remove(message)
 
-      if message.receiver == "Drone" and message.content == "Analyze":
+      elif message.receiver == "Drone" and message.content == "Analyze":
         print("Guardia me pide analizar")
         self.currentMessage = message.content
         self.model.messages.remove(message)
 
-      if message.receiver == "Drone" and (message.content == "1" or message.content == "0"):
+      elif message.receiver == "Drone" and (message.content == "1" or message.content == "0"):
         print("El intruso se ha identificado")
+        self.currentMessage = message.content
+        self.model.messages.remove(message)
+
+      elif message.receiver == "Drone" and isinstance(message.content, tuple):
+        print("Received coordinates:", message.content)
         self.currentMessage = message.content
         self.model.messages.remove(message)
 
@@ -453,10 +455,6 @@ class DroneAgent(ap.Agent):
     self.pathfinding_path.pop(0)
     self.this_drone.is_in_place.at_position = str(self.model.grid.positions[self])
 
-      # Check if the drone has reached its target
-    current_pos = eval(self.this_drone.is_in_place.at_position)
-    target_pos = eval(self.target)
-
   def call_guard(self):
     print("Drone reached the target and is calling the guard.")
 
@@ -477,6 +475,13 @@ class DroneAgent(ap.Agent):
     message = Message(sender = self.this_drone, receiver="Guard", content= self.currentMessage)
     self.model.messages.append(message)
     self.currentMessage = "Sent"
+
+  def move_exit(self):
+    print(f"Drone moving to {self.currentMessage} indication from guard")
+    message = Message(sender = self.this_drone, receiver="Intruder", content=eval(self.this_drone.is_in_place.at_position))
+    self.model.messages.append(message)
+    self.model.grid.move_to(self,self.currentMessage)
+    self.this_drone.is_in_place.at_position = str(self.model.grid.positions[self])
 
   """
     <-- Reglas -->
@@ -507,7 +512,7 @@ class DroneAgent(ap.Agent):
     return sum(validator) == 3
 
   def path_to_target_rule(self, act):
-    validator = [False, False, False,False]
+    validator = [False, False, False, False, False]
 
     if self.this_drone.is_following_intruder != None: #If the drone has been assigned an intruder, either by a camera or by itself
       validator[0] = True
@@ -518,10 +523,13 @@ class DroneAgent(ap.Agent):
     if self.pathfinding_path == []:
       validator[2] = True
 
-    if act == self.path_to_target:
+    if not (isinstance(self.currentMessage, tuple)):
       validator[3] = True
 
-    return sum(validator) == 4
+    if act == self.path_to_target:
+      validator[4] = True
+
+    return sum(validator) == 5
 
   def move_to_target_intruder_rule(self, act):
     validator = [False, False, False,False]
@@ -585,6 +593,20 @@ class DroneAgent(ap.Agent):
       validator[2] = True
 
     return sum(validator) == 3
+  
+  def move_exit_rule(self, act):
+    validator = [False, False, False]
+
+    if self.this_drone.is_following_intruder != None:
+      validator[0] = True
+
+    if isinstance(self.currentMessage, tuple):
+      validator[1] = True
+
+    if act == self.move_exit:
+      validator[2] = True
+      
+    return sum(validator) == 3
 
 class IntruderAgent(ap.Agent):
   """
@@ -605,7 +627,7 @@ class IntruderAgent(ap.Agent):
 
     self.targets.append((random.randint(0, round(self.model.p.M/2)-1),
                           random.randint(round(self.model.p.N/2), self.model.p.N-1)))
-
+    print(f"Intruder targets: {self.targets[0]}, {self.targets[1]}, {self.targets[2]}")
 
     self.actions = (
         self.select_target,
@@ -613,7 +635,7 @@ class IntruderAgent(ap.Agent):
         self.move_to_target,
         self.pick_up_target,
         self.identify_myself,
-
+        self.follow_drone
     )
 
     self.rules = (
@@ -622,6 +644,7 @@ class IntruderAgent(ap.Agent):
         self.move_to_target_rule,
         self.pick_up_target_rule,
         self.identify_myself_rule,
+        self.follow_drone_rule
     )
 
   """
@@ -636,9 +659,13 @@ class IntruderAgent(ap.Agent):
         self.this_intruder.has_been_detected = True
         self.model.messages.remove(message)
 
-      if message.receiver == "Intruder" and message.content == 'Identify':
+      elif message.receiver == "Intruder" and message.content == 'Identify':
         self.currentMessage = message.content
         self.model.messages.remove(message)
+
+      elif message.receiver == "Intruder" and isinstance(message.content, tuple):
+         self.currentMessage = message.content
+         self.model.messages.remove(message)
   """
     <-- Funcion de Next -->
   """
@@ -657,7 +684,8 @@ class IntruderAgent(ap.Agent):
   def step(self):
     if self.firsStep:
       self.firsStep = False
-      hostility = random.randint(0,1)
+      hostility = 1
+      #hostility = random.randint(0,1)
 
       place = self.model.grid.positions[self]
       self.this_intruder = Intruder(is_in_place=Place(at_position=str(place)),
@@ -752,6 +780,11 @@ class IntruderAgent(ap.Agent):
     self.model.messages.append(message)
     self.currentMessage = "Sent"
 
+  def follow_drone(self):
+     print("Following drone")
+     self.model.grid.move_to(self, self.currentMessage)
+     self.this_intruder.is_in_place.at_position = str(self.model.grid.positions[self])
+
   def select_target_rule(self, act):
       validator = [False, False, False, False]
 
@@ -818,6 +851,7 @@ class IntruderAgent(ap.Agent):
       return sum(validator) == 3
 
   def identify_myself_rule(self, act):
+
     validator = [False, False, False]
 
     if self.this_intruder.has_been_detected == True:
@@ -830,6 +864,18 @@ class IntruderAgent(ap.Agent):
       validator[2] = True
 
     return sum(validator) == 3
+  
+  def follow_drone_rule(self, act):
+    
+    validator = [False, False]
+
+    if isinstance(self.currentMessage, tuple):
+      validator[0] = True
+
+    if act == self.follow_drone:
+      validator[1] = True
+
+    return sum(validator) == 2
 
 class GuardAgent(ap.Agent):
 
@@ -845,14 +891,17 @@ class GuardAgent(ap.Agent):
     self.agentType = 4
     self.firstStep = True
     self.currentMessage = None
+    self.path_exit = []
     self.actions = (
         self.inspect_with_drone,
         self.choose_alarm,
+        self.move_drone
     )
 
     self.rules = (
         self.inspect_with_drone_rule,
         self.choose_alarm_rule,
+        self.move_drone_rule
     )
 
 
@@ -912,6 +961,51 @@ class GuardAgent(ap.Agent):
   """
     <-- Acciones -->
   """
+  def get_neighbors(self, pos):
+    x, y = pos
+    neighbors = []
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # up, down, left, right
+
+    for dx, dy in directions:
+        nx, ny = x + dx, y + dy
+        # Check if the neighbor is within the grid bounds and is walkable (no wall/obstacle)
+        if 0 <= nx < self.model.p.M and 0 <= ny < self.model.p.N:
+            if (nx,ny) in self.model.reservations.empty:  # Replace with your actual obstacle-checking logic
+                neighbors.append((nx, ny))
+
+    return neighbors
+  
+  def astar(self, start, goal):
+        """A* algorithm to find the shortest path."""
+        open_set = []
+        heapq.heappush(open_set, (0, start))
+        came_from = {}
+        g_score = {start: 0}
+        f_score = {start: heuristic(start, goal)}
+
+        while open_set:
+            _, current = heapq.heappop(open_set)
+
+            if current == goal:
+                # Reconstruct the path
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.reverse()
+                return path
+
+            for neighbor in self.get_neighbors(current):
+                tentative_g_score = g_score[current] + 1  # Assuming each move costs 1
+
+                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
+                    f_score[neighbor] = tentative_g_score + heuristic(neighbor, goal)
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+
+        return []  # Return an empty list if no path is found
+
 
   def inspect_with_drone(self):
     message = Message(sender = self.this_guard, receiver="Drone", content= "Analyze")
@@ -923,13 +1017,23 @@ class GuardAgent(ap.Agent):
       print("RESULTADO DE INTRUSO")
       print(f"Hostilidad: " + self.currentMessage)
       print("Falsa Alarma")
+      #Seguir patrullando
+      self.currentMessage = "Sent"
 
     else:
       print("RESULTADO DE INTRUSO")
       print(f"Hostilidad: " + self.currentMessage)
       print("Alarma General")
+      #Llevar a la salida
+      self.path_exit = self.astar(eval(self.this_guard.has_drone.is_in_place.at_position), self.model.exit)
+      print(f"Ruta hacia la salida: {self.path_exit}")
+      self.currentMessage = "Exit"
+      
 
-    self.currentMessage = "Sent"
+  def move_drone(self):
+    next = self.path_exit.pop(0)
+    message = Message(sender = self.this_guard, receiver="Drone", content= next)
+    self.model.messages.append(message)
 
   """
     <-- Reglas -->
@@ -958,6 +1062,20 @@ class GuardAgent(ap.Agent):
       validator[1] = True
 
     if act == self.choose_alarm:
+      validator[2] = True
+
+    return sum(validator) == 3
+  
+  def move_drone_rule(self, act):
+    validator = [False, False, False]
+    
+    if self.path_exit != []:
+       validator[0] = True
+
+    if self.currentMessage == "Exit":
+       validator[1] = True
+
+    if act == self.move_drone:
       validator[2] = True
 
     return sum(validator) == 3
@@ -1068,9 +1186,13 @@ class DroneModel(ap.Model):
 
     #Asignacion de Agentes
     #self.grid.add_agents(self.drones, [(round(self.model.p.M - (self.model.p.M * 0.7)) - 1,  round(self.model.p.N - (self.model.p.N * 0.7))-1)], empty=True)
-    self.grid.add_agents(self.intruders, [(round(self.model.p.M/2),round(self.model.p.N/2))], empty=True)
+    #self.grid.add_agents(self.intruders, [(round(self.model.p.M/2),round(self.model.p.N/2))], empty=True)
+    self.grid.add_agents(self.intruders, [(17, 0)], empty=True)
     self.grid.add_agents(self.drones, [(24,10)], empty=True)
     self.grid.add_agents(self.guards, [(23,2)], empty=True)
+
+    #Salida de la fábrica
+    self.exit = (17, 0)
 
     """
     for i in range(self.p.cameras):
@@ -1111,7 +1233,7 @@ pyParams = {
     'drones': 1,
     'intruders': 1,
     'guards': 1,
-    'steps': 80,
+    'steps': 100,
     'targets': 3,
 }
 
