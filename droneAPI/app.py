@@ -28,6 +28,21 @@ async def step(input_data: StepInput):
     
     return result
 
+# Define the input model using Pydantic
+class RecognitionInput(BaseModel):
+    detected: List[Tuple[str, float]]
+
+@app.post("/recognition")
+async def step(input_data: RecognitionInput):
+    # Access the data passed in the POST request
+    parameters = {
+        'detected': input_data.detected,
+    }
+    # print(parameters.detected[0][0])
+    # result = droneModel(parameters)  # Pass the data to your function
+    
+    return parameters.detected
+
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app, host='0.0.0.0', porit=5000)
