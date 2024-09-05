@@ -612,7 +612,7 @@ class IntruderAgent(ap.Agent):
   """
   <-- Funcion de Setup -->
   """
-  def setup(self):
+  def setup(self, hostility):
     self.agentType = 2
     self.firsStep = True
     self.targets = []
@@ -681,19 +681,19 @@ class IntruderAgent(ap.Agent):
     <-- Funcion de Paso -->
   """
 
-  def step(self):
+  def step(self, item):
     if self.firsStep:
       self.firsStep = False
-      hostility = 1
-      #hostility = random.randint(0,1)
-
       place = self.model.grid.positions[self]
       self.this_intruder = Intruder(is_in_place=Place(at_position=str(place)),
                                     has_been_detected= False,
                                     has_targets='',
-                                    is_hostile = str(hostility)
                                     )
-
+    hostility = 0
+    if (item == "person") {
+      hostility = 1
+    }
+    self.this_intruder = Intruder(is_hostile = str(hostility))
     self.see(self.model.grid)
     self.next()
 
@@ -1204,15 +1204,16 @@ class DroneModel(ap.Model):
     #self.grid.add_agents(self.cameras, random=True, empty=True)
     self.grid.add_agents(self.cameras, [(0,0), (0,self.model.p.N-1),(self.model.p.M-1,self.model.p.N-1)], empty=True)
 
-  def step(self):
+  def step(self, detected):
     print(f"Step: {self.steps}")
     print(f"Message: { len(self.messages) }")
+    print(f"Who: {detected[0]}")
     for message in self.messages:
       print(f"Sender: {message.sender}, Receiver: {message.receiver}, Content: {message.content}")
     self.guards.step()
     self.drones.step()
     self.cameras.step()
-    self.intruders.step()
+    self.intruders.step(detected[0])
 
     #Informacion de la sumulacion
     self.steps += 1
@@ -1245,7 +1246,8 @@ def droneModel(unityParams):
         model.setup()
     else:
       print("sigo vivo")
-    model.step()
+    # Pasar los datos de unityParams['detected'] a las creencias
+    model.step(unityParams['detected'])
     dron = model.grid.positions[model.drones[0]]
     intruder = model.grid.positions[model.intruders[0]]
     response = {"dron":dron, "intruder":intruder}
