@@ -157,7 +157,7 @@ class CameraAgent(ap.Agent):
   def see(self, e):
 
     #Vemos los vecinos de la camara
-    self.neighbors = e.neighbors(self,5)
+    self.neighbors = e.neighbors(self,7)
 
   """
     Funcion de Next
