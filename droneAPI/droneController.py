@@ -43,6 +43,7 @@ def get_neighbors(grid,node):
 
   return neighbors
 
+
 #Creamos la ontologia
 onto = get_ontology("file://ontologia.owl")
 
@@ -118,6 +119,7 @@ with onto:
   class is_inspecting_intruder(ObjectProperty, FunctionalProperty):
       domain = [Guard]
       range = [Intruder]
+
 
 class Message:
     def __init__(self, sender, receiver, content):
@@ -694,6 +696,8 @@ class IntruderAgent(ap.Agent):
       self.see(self.model.grid)
       self.next()
 
+  
+
   def update(self):
       pass
 
@@ -1203,9 +1207,7 @@ class DroneModel(ap.Model):
 
   def step(self, detected):
     print(f"Step: {self.steps}")
-    print(f"Step: {detected}")
     print(f"Message: { len(self.messages) }")
-    print(f"Who: {detected}")
     for message in self.messages:
       print(f"Sender: {message.sender}, Receiver: {message.receiver}, Content: {message.content}")
     self.guards.step()
