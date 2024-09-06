@@ -612,7 +612,7 @@ class IntruderAgent(ap.Agent):
   """
   <-- Funcion de Setup -->
   """
-  def setup(self, hostility):
+  def setup(self):
     self.agentType = 2
     self.firsStep = True
     self.targets = []
@@ -681,21 +681,18 @@ class IntruderAgent(ap.Agent):
     <-- Funcion de Paso -->
   """
 
-  def step(self, item):
-    if self.firsStep:
-      self.firsStep = False
-      place = self.model.grid.positions[self]
-      self.this_intruder = Intruder(is_in_place=Place(at_position=str(place)),
-                                    has_been_detected= False,
-                                    has_targets='',
-                                    )
-    hostility = 0
-    if (item == "person") {
-      hostility = 1
-    }
-    self.this_intruder = Intruder(is_hostile = str(hostility))
-    self.see(self.model.grid)
-    self.next()
+  def step(self, detected):
+      if self.firsStep:
+        self.firsStep = False
+        place = self.model.grid.positions[self]
+        self.this_intruder = Intruder(is_in_place=Place(at_position=str(place)),
+                                      has_been_detected= False,
+                                      has_targets='',
+                                      is_hostile = str(detected)
+                                      )
+      self.this_intruder.is_hostile = str(detected)
+      self.see(self.model.grid)
+      self.next()
 
   def update(self):
       pass
@@ -1206,14 +1203,15 @@ class DroneModel(ap.Model):
 
   def step(self, detected):
     print(f"Step: {self.steps}")
+    print(f"Step: {detected}")
     print(f"Message: { len(self.messages) }")
-    print(f"Who: {detected[0]}")
+    print(f"Who: {detected}")
     for message in self.messages:
       print(f"Sender: {message.sender}, Receiver: {message.receiver}, Content: {message.content}")
     self.guards.step()
     self.drones.step()
     self.cameras.step()
-    self.intruders.step(detected[0])
+    self.intruders.step(detected)
 
     #Informacion de la sumulacion
     self.steps += 1

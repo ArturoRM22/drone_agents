@@ -65,20 +65,17 @@ def handle_socket_client(client_socket, addr):
         results = model.track(img, persist=True)
 
         # Collect detected objects into a list
-        detected_objects = []
+        detected_object = 0
         for result in results:
             for obj in result.boxes:
                 class_name = model.names[int(obj.cls)]  # Get class name from class index
-                confidence = obj.conf.item()  # Convert to a regular Python float
-                detected_objects.append({
-                    "className": class_name,
-                    "confidence": confidence
-                })
+                if class_name == "person":
+                    detected_object = 1
 
         # Serialize the detected_objects list into a JSON string
         import json
-        detected_objects_json = json.dumps(detected_objects)
-        print(detected_objects_json)
+        detected_objects_json = json.dumps(detected_object)
+        print(f"Detected: {detected_objects_json}")
         # Send the JSON string back to the client
         client_socket.sendall(detected_objects_json.encode('utf-8'))
 
