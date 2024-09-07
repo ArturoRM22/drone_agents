@@ -55,20 +55,24 @@ The drone uses YOLO to monitor the warehouse, identifying objects and intruders 
 - python app.py
 - Correr unity
 
-## (Aún no implementado) Proceso para correr el servidor de la visión computacional (Yolo)
-- git clone https://github.com/Nuclea-Solutions/tec-2024B.git
-- cd tec-2024B\examples\unity-server
-- python server.py
-- Correr unity
-
 ## Usar unity pack
 - Creas proyecto en unity
 - Descargas el archivo Simulation.unitypackage del siguiente link de drive: https://drive.google.com/file/d/1AgDKW7svMgf1zU7_a53h-G-MDXYE5m1n/view?usp=sharing
 - En la pestaña de assets importas el pack Simulation.unitypackage
 - Corres
 
+## Proceso para correr el servidor de la visión computacional (Yolo)
+- cd drone_agents/unity-server
+- pip install -r requirements.txt {venv recomendado, se necesitan control de versiones de python}
+- pip install ultralytics
+- python server.py
+- asignar el script CameraStreamer.cs a Bodega. Una vez asignado abre la opción para poner 2 cámaras, elegimos entity camara, camara 2 que es la que detecta YOLO, y main camara que es la del juego.
+- Correr unity
+
+
+
 ## Jupyter notebook version (gráficas (parametros hardcodeados))
 - Asegurarse de tener instalado anaconda o algun otro interprete de Jupyter notebooks  (O google colab)
-- Abrir el archivo Current_CamerasModel.ipynb y corres
+- Abrir el archivo Current_CamerasModel_WithPlots.ipynb y corres
 - Verificar las instalaciones (el primer chunk)
 
